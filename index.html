@@ -374,8 +374,17 @@
 
         registration.form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const newParticipantNumber = parseInt(registration.inscricao.value, 10);
+            if(isNaN(newParticipantNumber)) return;
+
+            const isDuplicate = allParticipants.some(p => p.numeroInscricao === newParticipantNumber);
+            if(isDuplicate) {
+                showNotification("Inscrição Duplicada", `O participante com o número ${newParticipantNumber} já está cadastrado.`);
+                return;
+            }
+
             const newParticipant = {
-                numeroInscricao: parseInt(registration.inscricao.value, 10),
+                numeroInscricao: newParticipantNumber,
                 nome: registration.nome.value,
                 km: registration.km.value,
                 tipo: registration.tipo.value,
@@ -515,9 +524,20 @@
         
         arrival.form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const participantNumber = parseInt(arrival.numberInput.value, 10);
+            if(isNaN(participantNumber)) return;
+
+            const isDuplicate = allArrivals.some(arr => arr.numeroInscricao === participantNumber);
+            if(isDuplicate) {
+                showNotification("Chegada Duplicada", `A chegada para o participante #${participantNumber} já foi registrada.`);
+                arrival.numberInput.value = '';
+                arrival.numberInput.focus();
+                return;
+            }
+
             try {
                 await addDoc(arrivalsCollection, {
-                    numeroInscricao: parseInt(arrival.numberInput.value, 10),
+                    numeroInscricao: participantNumber,
                     horarioChegada: serverTimestamp(),
                 });
                 arrival.numberInput.value = '';
