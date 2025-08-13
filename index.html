@@ -433,15 +433,23 @@
         });
         
         const exportParticipants = () => {
+            if (allParticipants.length === 0) {
+                showNotification("Atenção", "Não há participantes para exportar.");
+                return;
+            }
             let csvContent = "inscricao,nome,km,tipo\r\n";
             allParticipants.forEach(p => {
                 csvContent += `${p.numeroInscricao},"${p.nome}","${p.km}","${p.tipo}"\r\n`;
             });
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `participantes_cadastrados_${new Date().toISOString().slice(0,10)}.csv`;
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `participantes_cadastrados_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
             link.click();
+            document.body.removeChild(link);
         };
 
         // --- LÓGICA DE CHEGADA ---
@@ -497,6 +505,10 @@
         });
         
         const exportArrivals = () => {
+            if (allArrivals.length === 0) {
+                showNotification("Atenção", "Não há chegadas para exportar.");
+                return;
+            }
             let csvContent = "inscricao,nome,km,tipo,horario_chegada\r\n";
             allArrivals.forEach(arr => {
                  const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
@@ -507,9 +519,13 @@
             });
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `chegadas_corrida_${new Date().toISOString().slice(0,10)}.csv`;
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `chegadas_corrida_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
             link.click();
+            document.body.removeChild(link);
         };
 
         // --- LÓGICA DE LIMPEZA DE DADOS ---
