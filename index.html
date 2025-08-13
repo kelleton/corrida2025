@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Corrida</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-container {
+            transition: all 0.3s ease;
+        }
+        .protected-control:disabled {
+            background-color: #d1d5db; /* gray-300 */
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        .protected-control:disabled:hover {
+            background-color: #d1d5db; /* gray-300 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Tela de Login -->
+    <div id="login-modal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
+            <h2 class="text-2xl font-bold text-center text-gray-900 mb-6">Acesso Restrito</h2>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700">Usuário</label>
+                    <input type="text" id="username" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" required>
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-700">Senha</label>
+                    <input type="password" id="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" required>
+                </div>
+                <p id="login-error" class="text-red-500 text-sm text-center mb-4 hidden">Usuário ou senha inválidos.</p>
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Entrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tela Principal: Controle de Chegada -->
+    <div id="arrival-view" class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
+        <div class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 text-center sm:text-left">Controle de Chegada</h1>
+                <div class="flex items-center gap-4">
+                    <button id="manage-participants-btn" class="protected-control w-full sm:w-auto bg-indigo-600 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition shadow-md">
+                        Gerenciar Participantes
+                    </button>
+                    <button id="logout-btn" class="w-full sm:w-auto bg-gray-500 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-gray-600 transition shadow-md hidden">
+                        Logout
+                    </button>
+                </div>
+            </div>
+            
+            <p class="text-gray-600 mb-6 text-center sm:text-left">Digite o número do participante para registrar a chegada.</p>
+            <form id="arrival-form" class="mb-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <input type="number" id="participant-number" placeholder="Número de Inscrição" class="w-full flex-grow px-4 py-3 text-lg border-2 rounded-lg focus:ring-blue-500" required>
+                <button type="submit" class="protected-control w-full sm:w-auto bg-blue-600 text-white font-bold text-lg px-8 py-3 rounded-lg hover:bg-blue-700 transition shadow-md">Registrar Chegada</button>
+            </form>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-semibold">Chegadas Registradas</h3>
+                <div class="flex gap-2">
+                    <button id="export-arrivals-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm">Exportar</button>
+                    <button id="clear-arrivals-btn" class="protected-control bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-sm">Limpar</button>
+                </div>
+            </div>
+            <div id="arrivals-loading" class="text-center py-4">Carregando...</div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Inscrição</th>
+                            <th class="px-4 py-2 text-left">Nome</th>
+                            <th class="px-4 py-2 text-left">KM</th>
+                            <th class="px-4 py-2 text-left">Tipo</th>
+                            <th class="px-4 py-2 text-left">Horário de Chegada</th>
+                        </tr>
+                    </thead>
+                    <tbody id="arrivals-table-body" class="divide-y"></tbody>
+                </table>
+                <div id="no-arrivals" class="text-center py-8 text-gray-500 hidden">Nenhuma chegada registrada.</div>
+            </div>
+        </div>
+        <footer class="text-center mt-6 text-sm text-gray-500"><p>Desenvolvido por Gemini</p></footer>
+    </div>
+
+    <!-- Tela de Cadastro de Participantes (Modal em Tela Cheia) -->
+    <div id="registration-modal" class="fixed inset-0 bg-gray-100 p-4 sm:p-6 lg:p-8 z-40 hidden overflow-y-auto">
+        <div class="relative max-w-7xl mx-auto">
+            <button id="close-registration-modal-btn" class="absolute -top-2 -right-2 text-gray-600 hover:text-gray-900 bg-gray-200 rounded-full p-2 z-50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <div class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">Cadastro de Participantes</h2>
+                <p class="text-gray-600 mb-6">Adicione participantes manualmente ou importe via arquivo Excel.</p>
+
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                    <h3 class="font-bold text-lg mb-2">Importar de Excel (.xlsx)</h3>
+                    <p class="text-sm text-gray-600 mb-3">O arquivo deve conter uma planilha com as colunas no cabeçalho: `inscricao`, `nome`, `km`, `tipo`.</p>
+                    <input type="file" id="file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                    <button id="import-file-btn" class="protected-control mt-3 bg-blue-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm disabled:opacity-50">Importar Arquivo</button>
+                </div>
+
+                 <form id="participant-form" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mb-8">
+                    <div class="md:col-span-1">
+                        <label for="p-inscricao" class="block text-sm font-medium text-gray-700">Nº Inscrição</label>
+                        <input type="number" id="p-inscricao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="p-nome" class="block text-sm font-medium text-gray-700">Nome Completo</label>
+                        <input type="text" id="p-nome" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                    </div>
+                    <div>
+                        <label for="p-km" class="block text-sm font-medium text-gray-700">Distância (KM)</label>
+                        <select id="p-km" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <option>5</option>
+                            <option>8</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="p-tipo" class="block text-sm font-medium text-gray-700">Tipo</label>
+                        <select id="p-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <option>Colaborador</option>
+                            <option>Externo</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="protected-control md:col-span-5 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition shadow-md">Adicionar Participante</button>
+                </form>
+
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-semibold">Participantes Cadastrados</h3>
+                    <div class="flex gap-2">
+                        <button id="export-participants-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm">Exportar</button>
+                        <button id="clear-participants-btn" class="protected-control bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-sm">Limpar</button>
+                    </div>
+                </div>
+                <div id="participants-loading" class="text-center py-4">Carregando...</div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white">
+                        <thead class="bg-gray-200">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Inscrição</th>
+                                <th class="px-4 py-2 text-left">Nome</th>
+                                <th class="px-4 py-2 text-left">KM</th>
+                                <th class="px-4 py-2 text-left">Tipo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="participants-table-body" class="divide-y"></tbody>
+                    </table>
+                    <div id="no-participants" class="text-center py-8 text-gray-500 hidden">Nenhum participante cadastrado.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação Genérico -->
+    <div id="confirmation-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-container bg-white w-full max-w-md p-6 rounded-xl shadow-2xl">
+            <h3 id="modal-title" class="text-xl font-bold text-gray-900 mb-4"></h3>
+            <p id="modal-message" class="text-gray-700 mb-6"></p>
+            <div class="flex justify-end gap-4">
+                <button id="cancel-btn" class="px-6 py-2 rounded-lg text-gray-800 bg-gray-200 hover:bg-gray-300 transition">Cancelar</button>
+                <button id="confirm-btn" class="px-6 py-2 rounded-lg text-white bg-red-600 hover:bg-red-700 transition">Sim, Confirmar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Notificação -->
+    <div id="notification-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-container bg-white w-full max-w-md p-6 rounded-xl shadow-2xl">
+            <h3 id="notification-title" class="text-xl font-bold text-gray-900 mb-4"></h3>
+            <p id="notification-message" class="text-gray-700 mb-6"></p>
+            <div class="flex justify-end">
+                <button id="notification-ok-btn" class="px-8 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition">OK</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, addDoc, getDocs, onSnapshot, query, serverTimestamp, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIGURAÇÃO ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyAgHXUACG1AgXV71Ja1ZNBPGRn4UesD5wg",
+          authDomain: "corrida2025.firebaseapp.com",
+          projectId: "corrida2025",
+          storageBucket: "corrida2025.appspot.com",
+          messagingSenderId: "417513439094",
+          appId: "1:417513439094:web:8c36f88f391a5eb4adc457",
+          measurementId: "G-RD4GFQTJDZ"
+        };
+        const appId = 'corrida2025';
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // --- ESTADO DA APLICAÇÃO ---
+        let allParticipants = [];
+        let allArrivals = [];
+        let confirmAction = null;
+
+        // --- ELEMENTOS DO DOM ---
+        const loginModal = document.getElementById('login-modal');
+        const loginForm = document.getElementById('login-form');
+        const loginError = document.getElementById('login-error');
+        const logoutBtn = document.getElementById('logout-btn');
+        const registrationModalEl = document.getElementById('registration-modal');
+        const manageParticipantsBtn = document.getElementById('manage-participants-btn');
+        const closeRegistrationModalBtn = document.getElementById('close-registration-modal-btn');
+        
+        const registration = {
+            form: document.getElementById('participant-form'),
+            inscricao: document.getElementById('p-inscricao'),
+            nome: document.getElementById('p-nome'),
+            km: document.getElementById('p-km'),
+            tipo: document.getElementById('p-tipo'),
+            fileInput: document.getElementById('file-input'),
+            importBtn: document.getElementById('import-file-btn'),
+            exportBtn: document.getElementById('export-participants-btn'),
+            clearBtn: document.getElementById('clear-participants-btn'),
+            tableBody: document.getElementById('participants-table-body'),
+            loading: document.getElementById('participants-loading'),
+            emptyMsg: document.getElementById('no-participants'),
+        };
+        const arrival = {
+            form: document.getElementById('arrival-form'),
+            numberInput: document.getElementById('participant-number'),
+            exportBtn: document.getElementById('export-arrivals-btn'),
+            clearBtn: document.getElementById('clear-arrivals-btn'),
+            tableBody: document.getElementById('arrivals-table-body'),
+            loading: document.getElementById('arrivals-loading'),
+            emptyMsg: document.getElementById('no-arrivals'),
+        };
+        const confirmModal = {
+            container: document.getElementById('confirmation-modal'),
+            title: document.getElementById('modal-title'),
+            message: document.getElementById('modal-message'),
+            cancelBtn: document.getElementById('cancel-btn'),
+            confirmBtn: document.getElementById('confirm-btn'),
+        };
+        const notificationModal = {
+            container: document.getElementById('notification-modal'),
+            title: document.getElementById('notification-title'),
+            message: document.getElementById('notification-message'),
+            okBtn: document.getElementById('notification-ok-btn'),
+        };
+
+        const protectedControls = document.querySelectorAll('.protected-control');
+
+        // --- COLEÇÕES DO FIRESTORE ---
+        const participantsCollection = collection(db, `/artifacts/${appId}/public/data/participantes`);
+        const arrivalsCollection = collection(db, `/artifacts/${appId}/public/data/chegadas`);
+
+        // --- LÓGICA DE AUTENTICAÇÃO ---
+        const setLoginState = (isLoggedIn) => {
+            if (isLoggedIn) {
+                loginModal.classList.add('hidden');
+                logoutBtn.classList.remove('hidden');
+                protectedControls.forEach(el => el.disabled = false);
+            } else {
+                loginModal.classList.remove('hidden');
+                logoutBtn.classList.add('hidden');
+                protectedControls.forEach(el => el.disabled = true);
+            }
+        };
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = loginForm.username.value;
+            const password = loginForm.password.value;
+            // Credenciais fixas. Para um sistema real, use um serviço de autenticação.
+            if (username === 'admin' && password === 'corrida2025') {
+                sessionStorage.setItem('isLoggedIn', 'true');
+                setLoginState(true);
+            } else {
+                loginError.classList.remove('hidden');
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            sessionStorage.removeItem('isLoggedIn');
+            setLoginState(false);
+        });
+
+        // --- FUNÇÕES UTILITÁRIAS E DE MODAL ---
+        const formatTimestamp = (ts) => ts ? ts.toDate().toLocaleString('pt-BR') : 'N/A';
+        
+        const showConfirmationModal = (title, message, action) => {
+            confirmModal.title.textContent = title;
+            confirmModal.message.textContent = message;
+            confirmAction = action;
+            confirmModal.container.classList.remove('hidden');
+        };
+        const hideConfirmationModal = () => confirmModal.container.classList.add('hidden');
+        
+        const showNotification = (title, message) => {
+            notificationModal.title.textContent = title;
+            notificationModal.message.textContent = message;
+            notificationModal.container.classList.remove('hidden');
+        }
+        const hideNotification = () => notificationModal.container.classList.add('hidden');
+        notificationModal.okBtn.addEventListener('click', hideNotification);
+
+        // --- LÓGICA DE NAVEGAÇÃO ---
+        manageParticipantsBtn.addEventListener('click', () => registrationModalEl.classList.remove('hidden'));
+        closeRegistrationModalBtn.addEventListener('click', () => registrationModalEl.classList.add('hidden'));
+
+        // --- LÓGICA DE CADASTRO ---
+        const renderParticipants = (participants) => {
+            registration.loading.style.display = 'none';
+            registration.tableBody.innerHTML = '';
+            const hasData = participants.length > 0;
+            registration.emptyMsg.classList.toggle('hidden', hasData);
+            [registration.exportBtn, registration.clearBtn].forEach(btn => {
+                if(sessionStorage.getItem('isLoggedIn') !== 'true') {
+                    btn.disabled = true;
+                } else {
+                    btn.disabled = !hasData;
+                }
+                btn.classList.toggle('opacity-50', btn.disabled);
+            });
+            participants.sort((a,b) => a.numeroInscricao - b.numeroInscricao).forEach(p => {
+                const row = registration.tableBody.insertRow();
+                row.innerHTML = `
+                    <td class="px-4 py-2">${p.numeroInscricao}</td>
+                    <td class="px-4 py-2">${p.nome}</td>
+                    <td class="px-4 py-2">${p.km}</td>
+                    <td class="px-4 py-2">${p.tipo}</td>
+                `;
+            });
+        };
+
+        registration.form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newParticipant = {
+                numeroInscricao: parseInt(registration.inscricao.value, 10),
+                nome: registration.nome.value,
+                km: registration.km.value,
+                tipo: registration.tipo.value,
+            };
+            try {
+                await addDoc(participantsCollection, newParticipant);
+                registration.form.reset();
+            } catch (error) {
+                console.error("Erro ao adicionar participante:", error);
+                showNotification("Erro", "Falha ao adicionar participante.");
+            }
+        });
+
+        registration.importBtn.addEventListener('click', () => {
+            const file = registration.fileInput.files[0];
+            if (!file) {
+                showNotification("Atenção", "Por favor, selecione um arquivo Excel (.xlsx).");
+                return;
+            }
+            
+            registration.importBtn.disabled = true;
+            registration.importBtn.textContent = "Importando...";
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (json.length === 0) {
+                        showNotification("Erro de Importação", "O arquivo Excel parece estar vazio ou em um formato incorreto.");
+                        return;
+                    }
+
+                    const headers = Object.keys(json[0]).map(h => h.toLowerCase());
+                    const requiredColumns = ['inscricao', 'nome', 'km', 'tipo'];
+                    const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+
+                    if (missingColumns.length > 0) {
+                        showNotification("Erro de Importação", `O arquivo Excel não contém as colunas necessárias: ${missingColumns.join(', ')}.`);
+                        return;
+                    }
+                    
+                    const headerMap = Object.keys(json[0]).reduce((acc, key) => {
+                        acc[key.toLowerCase()] = key;
+                        return acc;
+                    }, {});
+
+                    const batch = writeBatch(db);
+                    json.forEach(row => {
+                        const inscricao = row[headerMap['inscricao']];
+                        const nome = row[headerMap['nome']];
+                        const km = row[headerMap['km']];
+                        const tipo = row[headerMap['tipo']];
+
+                        if (inscricao && nome && km && tipo) {
+                            const docRef = doc(participantsCollection);
+                            batch.set(docRef, {
+                                numeroInscricao: parseInt(inscricao, 10),
+                                nome: String(nome),
+                                km: String(km),
+                                tipo: String(tipo),
+                            });
+                        }
+                    });
+
+                    await batch.commit();
+                    showNotification("Sucesso!", `${json.length} participantes foram importados com sucesso!`);
+                    registration.fileInput.value = '';
+                } catch (error) {
+                    console.error("Erro ao importar arquivo Excel:", error);
+                    showNotification("Erro", "Ocorreu um erro ao processar o arquivo Excel. Verifique se o formato e os dados estão corretos.");
+                } finally {
+                    registration.importBtn.disabled = false;
+                    registration.importBtn.textContent = "Importar Arquivo";
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+        
+        const exportParticipants = () => {
+            let csvContent = "inscricao,nome,km,tipo\r\n";
+            allParticipants.forEach(p => {
+                csvContent += `${p.numeroInscricao},"${p.nome}","${p.km}","${p.tipo}"\r\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `participantes_cadastrados_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        };
+
+        // --- LÓGICA DE CHEGADA ---
+        const renderArrivals = async (arrivals) => {
+            arrival.loading.style.display = 'none';
+            arrival.tableBody.innerHTML = '';
+            const hasData = arrivals.length > 0;
+            arrival.emptyMsg.classList.toggle('hidden', hasData);
+            [arrival.exportBtn, arrival.clearBtn].forEach(btn => {
+                if(sessionStorage.getItem('isLoggedIn') !== 'true') {
+                    btn.disabled = true;
+                } else {
+                    btn.disabled = !hasData;
+                }
+                btn.classList.toggle('opacity-50', btn.disabled);
+            });
+
+            const enrichedArrivals = arrivals.map(arr => {
+                const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
+                return { 
+                    ...arr, 
+                    nome: participant ? participant.nome : 'Não cadastrado',
+                    km: participant ? participant.km : 'N/A',
+                    tipo: participant ? participant.tipo : 'N/A' 
+                };
+            });
+
+            enrichedArrivals.sort((a, b) => (b.horarioChegada?.toMillis() || 0) - (a.horarioChegada?.toMillis() || 0)).forEach(arr => {
+                const row = arrival.tableBody.insertRow();
+                row.innerHTML = `
+                    <td class="px-4 py-2">${arr.numeroInscricao}</td>
+                    <td class="px-4 py-2">${arr.nome}</td>
+                    <td class="px-4 py-2">${arr.km}</td>
+                    <td class="px-4 py-2">${arr.tipo}</td>
+                    <td class="px-4 py-2">${formatTimestamp(arr.horarioChegada)}</td>
+                `;
+            });
+        };
+        
+        arrival.form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                await addDoc(arrivalsCollection, {
+                    numeroInscricao: parseInt(arrival.numberInput.value, 10),
+                    horarioChegada: serverTimestamp(),
+                });
+                arrival.numberInput.value = '';
+                arrival.numberInput.focus();
+            } catch (error) {
+                console.error("Erro ao registrar chegada:", error);
+                showNotification("Erro", "Falha ao registrar chegada.");
+            }
+        });
+        
+        const exportArrivals = () => {
+            let csvContent = "inscricao,nome,km,tipo,horario_chegada\r\n";
+            allArrivals.forEach(arr => {
+                 const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
+                 const nome = participant ? participant.nome : 'Nao cadastrado';
+                 const km = participant ? participant.km : 'N/A';
+                 const tipo = participant ? participant.tipo : 'N/A';
+                csvContent += `${arr.numeroInscricao},"${nome}","${km}","${tipo}","${formatTimestamp(arr.horarioChegada)}"\r\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `chegadas_corrida_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        };
+
+        // --- LÓGICA DE LIMPEZA DE DADOS ---
+        const clearCollection = async (collectionRef) => {
+            const snapshot = await getDocs(collectionRef);
+            const batch = writeBatch(db);
+            snapshot.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        };
+        
+        registration.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Cadastros', 'Tem certeza que deseja apagar TODOS os participantes cadastrados? Esta ação é irreversível.', () => clearCollection(participantsCollection)));
+        arrival.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Chegadas', 'Tem certeza que deseja apagar TODOS os registros de chegada? Esta ação é irreversível.', () => clearCollection(arrivalsCollection)));
+        registration.exportBtn.addEventListener('click', exportParticipants);
+        arrival.exportBtn.addEventListener('click', exportArrivals);
+        
+        confirmModal.cancelBtn.addEventListener('click', hideConfirmationModal);
+        confirmModal.confirmBtn.addEventListener('click', async () => {
+            if (typeof confirmAction === 'function') {
+                try {
+                    await confirmAction();
+                } catch (error) {
+                    console.error("Erro ao executar ação de confirmação:", error);
+                    showNotification("Erro", "Ocorreu um erro ao executar a ação.");
+                } finally {
+                    hideConfirmationModal();
+                }
+            }
+        });
+
+        // --- INICIALIZAÇÃO ---
+        const initializeAppLogic = () => {
+            setLoginState(sessionStorage.getItem('isLoggedIn') === 'true');
+
+            onSnapshot(query(participantsCollection), (snapshot) => {
+                allParticipants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderParticipants(allParticipants);
+                if (allArrivals.length > 0) renderArrivals(allArrivals);
+            });
+
+            onSnapshot(query(arrivalsCollection), (snapshot) => {
+                allArrivals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderArrivals(allArrivals);
+            });
+        };
+
+        initializeAppLogic();
+
+    </script>
+</body>
+</html>
