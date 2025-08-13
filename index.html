@@ -109,14 +109,22 @@
                 </svg>
             </button>
             <div class="bg-white rounded-xl shadow-lg p-6 md:p-8">
-                <h2 class="text-3xl font-bold text-gray-900 mb-2">Cadastro de Participantes</h2>
-                <p class="text-gray-600 mb-6">Adicione participantes manualmente ou importe via arquivo Excel.</p>
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">Gerenciar Participantes e Chegadas</h2>
+                <p class="text-gray-600 mb-6">Adicione, importe ou recupere dados.</p>
 
-                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-                    <h3 class="font-bold text-lg mb-2">Importar de Excel (.xlsx)</h3>
-                    <p class="text-sm text-gray-600 mb-3">O arquivo deve conter uma planilha com as colunas no cabeçalho: `inscricao`, `nome`, `km`, `tipo`.</p>
-                    <input type="file" id="file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                    <button id="import-file-btn" class="protected-control mt-3 bg-blue-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm disabled:opacity-50">Importar Arquivo</button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h3 class="font-bold text-lg mb-2">Importar Participantes (.xlsx)</h3>
+                        <p class="text-sm text-gray-600 mb-3">O arquivo deve ter as colunas: `inscricao`, `nome`, `km`, `tipo`.</p>
+                        <input type="file" id="file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                        <button id="import-file-btn" class="protected-control mt-3 bg-blue-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm disabled:opacity-50">Importar Participantes</button>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h3 class="font-bold text-lg mb-2">Importar Chegadas (Backup CSV)</h3>
+                        <p class="text-sm text-gray-600 mb-3">Recupere os dados de chegada a partir de um arquivo de backup.</p>
+                        <input type="file" id="arrivals-file-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-50 file:text-yellow-700 hover:file:bg-yellow-100"/>
+                        <button id="import-arrivals-btn" class="protected-control mt-3 bg-yellow-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-yellow-700 transition shadow-sm disabled:opacity-50">Importar Chegadas</button>
+                    </div>
                 </div>
 
                  <form id="participant-form" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mb-8">
@@ -241,6 +249,8 @@
             tipo: document.getElementById('p-tipo'),
             fileInput: document.getElementById('file-input'),
             importBtn: document.getElementById('import-file-btn'),
+            arrivalsFileInput: document.getElementById('arrivals-file-input'),
+            importArrivalsBtn: document.getElementById('import-arrivals-btn'),
             exportBtn: document.getElementById('export-participants-btn'),
             clearBtn: document.getElementById('clear-participants-btn'),
             tableBody: document.getElementById('participants-table-body'),
@@ -580,16 +590,86 @@
             }
         });
 
-        // --- LÓGICA DE LIMPEZA DE DADOS ---
+        // --- LÓGICA DE LIMPEZA E IMPORTAÇÃO DE BACKUP ---
         const clearCollection = async (collectionRef) => {
             const snapshot = await getDocs(collectionRef);
             const batch = writeBatch(db);
             snapshot.docs.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
         };
+
+        function parseBrazilianTimestamp(timestampStr) {
+            if (!timestampStr || timestampStr === 'N/A') return null;
+            const [datePart, timePart] = timestampStr.split(', ');
+            if(!datePart || !timePart) return null;
+            const [day, month, year] = datePart.split('/');
+            const [hours, minutes, seconds] = timePart.split(':');
+            return new Date(year, month - 1, day, hours, minutes, seconds);
+        }
+
+        registration.importArrivalsBtn.addEventListener('click', () => {
+            const file = registration.arrivalsFileInput.files[0];
+            if (!file) {
+                showNotification("Atenção", "Por favor, selecione um arquivo de backup (.csv).");
+                return;
+            }
+            
+            registration.importArrivalsBtn.disabled = true;
+            registration.importArrivalsBtn.textContent = "Importando...";
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const text = event.target.result;
+                    const lines = text.split(/\r\n|\n/);
+                    const header = lines[0].split(',');
+                    if (header[0] !== 'inscricao' || header[4] !== 'horario_chegada') {
+                         showNotification("Erro de Importação", "O arquivo de backup de chegadas é inválido.");
+                         return;
+                    }
+
+                    const batch = writeBatch(db);
+                    lines.slice(1).forEach(line => {
+                        if (!line) return;
+                        const columns = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+                        if (columns.length >= 5) {
+                            const inscricao = parseInt(columns[0].replace(/"/g, '').trim(), 10);
+                            const horarioStr = columns[4].replace(/"/g, '').trim();
+                            const horarioDate = parseBrazilianTimestamp(horarioStr);
+
+                            if (!isNaN(inscricao) && horarioDate) {
+                                const docRef = doc(arrivalsCollection);
+                                batch.set(docRef, {
+                                    numeroInscricao: inscricao,
+                                    horarioChegada: horarioDate
+                                });
+                            }
+                        }
+                    });
+
+                    await batch.commit();
+                    showNotification("Sucesso!", `${lines.length - 1} registros de chegada foram importados com sucesso!`);
+                    registration.arrivalsFileInput.value = '';
+                } catch (error) {
+                    console.error("Erro ao importar backup de chegadas:", error);
+                    showNotification("Erro", "Ocorreu um erro ao processar o arquivo de backup.");
+                } finally {
+                    registration.importArrivalsBtn.disabled = false;
+                    registration.importArrivalsBtn.textContent = "Importar Chegadas";
+                }
+            };
+            reader.readAsText(file);
+        });
         
         registration.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Cadastros', 'Tem certeza que deseja apagar TODOS os participantes?', () => clearCollection(participantsCollection)));
-        arrival.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Chegadas', 'Tem certeza que deseja apagar TODOS os registros de chegada?', () => clearCollection(arrivalsCollection)));
+        
+        arrival.clearBtn.addEventListener('click', () => {
+            if (allArrivals.length > 0) {
+                exportArrivals();
+            }
+            showConfirmationModal('Limpar Chegadas', 'Um backup foi salvo. Tem certeza que deseja apagar TODOS os registros de chegada?', () => clearCollection(arrivalsCollection));
+        });
+
         registration.exportBtn.addEventListener('click', exportParticipants);
         arrival.exportBtn.addEventListener('click', exportArrivals);
         
@@ -627,4 +707,4 @@
 
     </script>
 </body>
-</html>
+</ht
