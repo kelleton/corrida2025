@@ -71,7 +71,7 @@
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-2xl font-semibold">Chegadas Registradas</h3>
                 <div class="flex gap-2">
-                    <button id="export-arrivals-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm">Exportar</button>
+                    <button id="export-arrivals-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm disabled:opacity-50" disabled>Exportar</button>
                     <button id="clear-arrivals-btn" class="protected-control bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-sm">Limpar</button>
                 </div>
             </div>
@@ -143,7 +143,7 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-2xl font-semibold">Participantes Cadastrados</h3>
                     <div class="flex gap-2">
-                        <button id="export-participants-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm">Exportar</button>
+                        <button id="export-participants-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm disabled:opacity-50" disabled>Exportar</button>
                         <button id="clear-participants-btn" class="protected-control bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-sm">Limpar</button>
                     </div>
                 </div>
@@ -277,6 +277,9 @@
                 logoutBtn.classList.add('hidden');
                 protectedControls.forEach(el => el.disabled = true);
             }
+            // Re-render tables to update button states after login/logout
+            renderParticipants(allParticipants);
+            renderArrivals(allArrivals);
         };
 
         loginForm.addEventListener('submit', (e) => {
@@ -325,15 +328,18 @@
             registration.loading.style.display = 'none';
             registration.tableBody.innerHTML = '';
             const hasData = participants.length > 0;
-            registration.emptyMsg.classList.toggle('hidden', hasData);
-            [registration.exportBtn, registration.clearBtn].forEach(btn => {
-                if(sessionStorage.getItem('isLoggedIn') !== 'true') {
-                    btn.disabled = true;
-                } else {
-                    btn.disabled = !hasData;
-                }
-                btn.classList.toggle('opacity-50', btn.disabled);
-            });
+            const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
+
+            registration.emptyMsg.classList.toggle('hidden', !hasData);
+            
+            // Export button is enabled if there is data
+            registration.exportBtn.disabled = !hasData;
+            registration.exportBtn.classList.toggle('opacity-50', !hasData);
+
+            // Clear button is enabled if logged in AND there is data
+            registration.clearBtn.disabled = !isLoggedIn || !hasData;
+            registration.clearBtn.classList.toggle('opacity-50', !isLoggedIn || !hasData);
+
             participants.sort((a,b) => a.numeroInscricao - b.numeroInscricao).forEach(p => {
                 const row = registration.tableBody.insertRow();
                 row.innerHTML = `
@@ -457,15 +463,18 @@
             arrival.loading.style.display = 'none';
             arrival.tableBody.innerHTML = '';
             const hasData = arrivals.length > 0;
-            arrival.emptyMsg.classList.toggle('hidden', hasData);
-            [arrival.exportBtn, arrival.clearBtn].forEach(btn => {
-                if(sessionStorage.getItem('isLoggedIn') !== 'true') {
-                    btn.disabled = true;
-                } else {
-                    btn.disabled = !hasData;
-                }
-                btn.classList.toggle('opacity-50', btn.disabled);
-            });
+            const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
+
+            arrival.emptyMsg.classList.toggle('hidden', !hasData);
+            
+            // Export button is enabled if there is data
+            arrival.exportBtn.disabled = !hasData;
+            arrival.exportBtn.classList.toggle('opacity-50', !hasData);
+
+            // Clear button is enabled if logged in AND there is data
+            arrival.clearBtn.disabled = !isLoggedIn || !hasData;
+            arrival.clearBtn.classList.toggle('opacity-50', !isLoggedIn || !hasData);
+
 
             const enrichedArrivals = arrivals.map(arr => {
                 const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
