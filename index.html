@@ -95,7 +95,6 @@
                     </thead>
                     <tbody id="arrivals-table-body" class="divide-y"></tbody>
                 </table>
-                <div id="no-arrivals" class="text-center py-8 text-gray-500 hidden">Nenhuma chegada registrada.</div>
             </div>
         </div>
         <footer class="text-center mt-6 text-sm text-gray-500"><p>Desenvolvido por Kelleton Ferreira</p></footer>
@@ -257,7 +256,6 @@
             clearBtn: document.getElementById('clear-arrivals-btn'),
             tableBody: document.getElementById('arrivals-table-body'),
             loading: document.getElementById('arrivals-loading'),
-            emptyMsg: document.getElementById('no-arrivals'),
             search: document.getElementById('search-arrivals'),
             count: document.getElementById('arrivals-count'),
         };
@@ -344,7 +342,7 @@
             const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
 
             registration.count.textContent = participantsToRender.length;
-            registration.emptyMsg.classList.toggle('hidden', hasData);
+            registration.emptyMsg.classList.toggle('hidden', !hasData);
             
             registration.exportBtn.disabled = !hasData;
             registration.exportBtn.classList.toggle('opacity-50', !hasData);
@@ -477,7 +475,6 @@
             const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
 
             arrival.count.textContent = arrivalsToRender.length;
-            arrival.emptyMsg.classList.toggle('hidden', !hasData);
             
             arrival.exportBtn.disabled = !hasData;
             arrival.clearBtn.disabled = !isLoggedIn || !hasData;
