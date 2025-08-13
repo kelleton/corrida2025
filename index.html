@@ -68,8 +68,13 @@
                 <input type="number" id="participant-number" placeholder="Número de Inscrição" class="w-full flex-grow px-4 py-3 text-lg border-2 rounded-lg focus:ring-blue-500" required>
                 <button type="submit" class="protected-control w-full sm:w-auto bg-blue-600 text-white font-bold text-lg px-8 py-3 rounded-lg hover:bg-blue-700 transition shadow-md">Registrar Chegada</button>
             </form>
+
+            <div class="mb-4">
+                <input type="text" id="search-arrivals" placeholder="Pesquisar por nome ou inscrição..." class="w-full px-4 py-2 border rounded-lg">
+            </div>
+
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl font-semibold">Chegadas Registradas</h3>
+                <h3 class="text-2xl font-semibold">Chegadas Registradas (<span id="arrivals-count">0</span>)</h3>
                 <div class="flex gap-2">
                     <button id="export-arrivals-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm disabled:opacity-50" disabled>Exportar</button>
                     <button id="clear-arrivals-btn" class="protected-control bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-sm">Limpar</button>
@@ -85,6 +90,7 @@
                             <th class="px-4 py-2 text-left">KM</th>
                             <th class="px-4 py-2 text-left">Tipo</th>
                             <th class="px-4 py-2 text-left">Horário de Chegada</th>
+                            <th class="px-4 py-2 text-left">Ações</th>
                         </tr>
                     </thead>
                     <tbody id="arrivals-table-body" class="divide-y"></tbody>
@@ -92,7 +98,7 @@
                 <div id="no-arrivals" class="text-center py-8 text-gray-500 hidden">Nenhuma chegada registrada.</div>
             </div>
         </div>
-        <footer class="text-center mt-6 text-sm text-gray-500"><p>Desenvolvido por Gemini</p></footer>
+        <footer class="text-center mt-6 text-sm text-gray-500"><p>Desenvolvido por Kelleton Ferreira</p></footer>
     </div>
 
     <!-- Tela de Cadastro de Participantes (Modal em Tela Cheia) -->
@@ -140,8 +146,12 @@
                     <button type="submit" class="protected-control md:col-span-5 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition shadow-md">Adicionar Participante</button>
                 </form>
 
+                <div class="mb-4">
+                    <input type="text" id="search-participants" placeholder="Pesquisar por nome ou inscrição..." class="w-full px-4 py-2 border rounded-lg">
+                </div>
+
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-2xl font-semibold">Participantes Cadastrados</h3>
+                    <h3 class="text-2xl font-semibold">Participantes Cadastrados (<span id="participants-count">0</span>)</h3>
                     <div class="flex gap-2">
                         <button id="export-participants-btn" class="bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm disabled:opacity-50" disabled>Exportar</button>
                         <button id="clear-participants-btn" class="protected-control bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-sm">Limpar</button>
@@ -156,6 +166,7 @@
                                 <th class="px-4 py-2 text-left">Nome</th>
                                 <th class="px-4 py-2 text-left">KM</th>
                                 <th class="px-4 py-2 text-left">Tipo</th>
+                                <th class="px-4 py-2 text-left">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="participants-table-body" class="divide-y"></tbody>
@@ -236,6 +247,8 @@
             tableBody: document.getElementById('participants-table-body'),
             loading: document.getElementById('participants-loading'),
             emptyMsg: document.getElementById('no-participants'),
+            search: document.getElementById('search-participants'),
+            count: document.getElementById('participants-count'),
         };
         const arrival = {
             form: document.getElementById('arrival-form'),
@@ -245,6 +258,8 @@
             tableBody: document.getElementById('arrivals-table-body'),
             loading: document.getElementById('arrivals-loading'),
             emptyMsg: document.getElementById('no-arrivals'),
+            search: document.getElementById('search-arrivals'),
+            count: document.getElementById('arrivals-count'),
         };
         const confirmModal = {
             container: document.getElementById('confirmation-modal'),
@@ -277,7 +292,6 @@
                 logoutBtn.classList.add('hidden');
                 protectedControls.forEach(el => el.disabled = true);
             }
-            // Re-render tables to update button states after login/logout
             renderParticipants(allParticipants);
             renderArrivals(allArrivals);
         };
@@ -286,7 +300,6 @@
             e.preventDefault();
             const username = loginForm.username.value;
             const password = loginForm.password.value;
-            // Credenciais fixas. Para um sistema real, use um serviço de autenticação.
             if (username === 'admin' && password === 'corrida2025') {
                 sessionStorage.setItem('isLoggedIn', 'true');
                 setLoginState(true);
@@ -324,29 +337,32 @@
         closeRegistrationModalBtn.addEventListener('click', () => registrationModalEl.classList.add('hidden'));
 
         // --- LÓGICA DE CADASTRO ---
-        const renderParticipants = (participants) => {
+        const renderParticipants = (participantsToRender) => {
             registration.loading.style.display = 'none';
             registration.tableBody.innerHTML = '';
-            const hasData = participants.length > 0;
+            const hasData = participantsToRender.length > 0;
             const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
 
-            registration.emptyMsg.classList.toggle('hidden', !hasData);
+            registration.count.textContent = participantsToRender.length;
+            registration.emptyMsg.classList.toggle('hidden', hasData);
             
-            // Export button is enabled if there is data
             registration.exportBtn.disabled = !hasData;
             registration.exportBtn.classList.toggle('opacity-50', !hasData);
 
-            // Clear button is enabled if logged in AND there is data
             registration.clearBtn.disabled = !isLoggedIn || !hasData;
-            registration.clearBtn.classList.toggle('opacity-50', !isLoggedIn || !hasData);
-
-            participants.sort((a,b) => a.numeroInscricao - b.numeroInscricao).forEach(p => {
+            
+            participantsToRender.sort((a,b) => a.numeroInscricao - b.numeroInscricao).forEach(p => {
                 const row = registration.tableBody.insertRow();
                 row.innerHTML = `
                     <td class="px-4 py-2">${p.numeroInscricao}</td>
                     <td class="px-4 py-2">${p.nome}</td>
                     <td class="px-4 py-2">${p.km}</td>
                     <td class="px-4 py-2">${p.tipo}</td>
+                    <td class="px-4 py-2">
+                        <button data-id="${p.id}" class="delete-participant-btn protected-control text-red-500 hover:text-red-700" ${!isLoggedIn ? 'disabled' : ''}>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </td>
                 `;
             });
         };
@@ -429,7 +445,7 @@
                     registration.fileInput.value = '';
                 } catch (error) {
                     console.error("Erro ao importar arquivo Excel:", error);
-                    showNotification("Erro", "Ocorreu um erro ao processar o arquivo Excel. Verifique se o formato e os dados estão corretos.");
+                    showNotification("Erro", "Ocorreu um erro ao processar o arquivo Excel.");
                 } finally {
                     registration.importBtn.disabled = false;
                     registration.importBtn.textContent = "Importar Arquivo";
@@ -439,44 +455,34 @@
         });
         
         const exportParticipants = () => {
-            if (allParticipants.length === 0) {
-                showNotification("Atenção", "Não há participantes para exportar.");
-                return;
-            }
+            if (allParticipants.length === 0) return;
             let csvContent = "inscricao,nome,km,tipo\r\n";
             allParticipants.forEach(p => {
                 csvContent += `${p.numeroInscricao},"${p.nome}","${p.km}","${p.tipo}"\r\n`;
             });
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `participantes_cadastrados_${new Date().toISOString().slice(0,10)}.csv`);
-            link.style.visibility = 'hidden';
+            link.href = URL.createObjectURL(blob);
+            link.download = `participantes_cadastrados_${new Date().toISOString().slice(0,10)}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         };
 
         // --- LÓGICA DE CHEGADA ---
-        const renderArrivals = async (arrivals) => {
+        const renderArrivals = (arrivalsToRender) => {
             arrival.loading.style.display = 'none';
             arrival.tableBody.innerHTML = '';
-            const hasData = arrivals.length > 0;
+            const hasData = arrivalsToRender.length > 0;
             const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
 
+            arrival.count.textContent = arrivalsToRender.length;
             arrival.emptyMsg.classList.toggle('hidden', !hasData);
             
-            // Export button is enabled if there is data
             arrival.exportBtn.disabled = !hasData;
-            arrival.exportBtn.classList.toggle('opacity-50', !hasData);
-
-            // Clear button is enabled if logged in AND there is data
             arrival.clearBtn.disabled = !isLoggedIn || !hasData;
-            arrival.clearBtn.classList.toggle('opacity-50', !isLoggedIn || !hasData);
 
-
-            const enrichedArrivals = arrivals.map(arr => {
+            const enrichedArrivals = arrivalsToRender.map(arr => {
                 const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
                 return { 
                     ...arr, 
@@ -494,6 +500,11 @@
                     <td class="px-4 py-2">${arr.km}</td>
                     <td class="px-4 py-2">${arr.tipo}</td>
                     <td class="px-4 py-2">${formatTimestamp(arr.horarioChegada)}</td>
+                    <td class="px-4 py-2">
+                         <button data-id="${arr.id}" class="delete-arrival-btn protected-control text-red-500 hover:text-red-700" ${!isLoggedIn ? 'disabled' : ''}>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </td>
                 `;
             });
         };
@@ -514,10 +525,7 @@
         });
         
         const exportArrivals = () => {
-            if (allArrivals.length === 0) {
-                showNotification("Atenção", "Não há chegadas para exportar.");
-                return;
-            }
+            if (allArrivals.length === 0) return;
             let csvContent = "inscricao,nome,km,tipo,horario_chegada\r\n";
             allArrivals.forEach(arr => {
                  const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
@@ -528,14 +536,52 @@
             });
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `chegadas_corrida_${new Date().toISOString().slice(0,10)}.csv`);
-            link.style.visibility = 'hidden';
+            link.href = URL.createObjectURL(blob);
+            link.download = `chegadas_corrida_${new Date().toISOString().slice(0,10)}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         };
+
+        // --- LÓGICA DE PESQUISA E EXCLUSÃO ---
+        registration.search.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filtered = allParticipants.filter(p => 
+                p.nome.toLowerCase().includes(searchTerm) || 
+                String(p.numeroInscricao).includes(searchTerm)
+            );
+            renderParticipants(filtered);
+        });
+
+        arrival.search.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filtered = allArrivals.filter(arr => {
+                const participant = allParticipants.find(p => p.numeroInscricao === arr.numeroInscricao);
+                const name = participant ? participant.nome : '';
+                return name.toLowerCase().includes(searchTerm) || String(arr.numeroInscricao).includes(searchTerm);
+            });
+            renderArrivals(filtered);
+        });
+
+        registration.tableBody.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-participant-btn');
+            if (deleteBtn) {
+                const docId = deleteBtn.dataset.id;
+                showConfirmationModal('Excluir Participante', 'Tem certeza que deseja excluir este participante?', () => {
+                    deleteDoc(doc(participantsCollection, docId));
+                });
+            }
+        });
+
+        arrival.tableBody.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-arrival-btn');
+            if (deleteBtn) {
+                const docId = deleteBtn.dataset.id;
+                showConfirmationModal('Excluir Chegada', 'Tem certeza que deseja excluir este registro de chegada?', () => {
+                    deleteDoc(doc(arrivalsCollection, docId));
+                });
+            }
+        });
 
         // --- LÓGICA DE LIMPEZA DE DADOS ---
         const clearCollection = async (collectionRef) => {
@@ -545,8 +591,8 @@
             await batch.commit();
         };
         
-        registration.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Cadastros', 'Tem certeza que deseja apagar TODOS os participantes cadastrados? Esta ação é irreversível.', () => clearCollection(participantsCollection)));
-        arrival.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Chegadas', 'Tem certeza que deseja apagar TODOS os registros de chegada? Esta ação é irreversível.', () => clearCollection(arrivalsCollection)));
+        registration.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Cadastros', 'Tem certeza que deseja apagar TODOS os participantes?', () => clearCollection(participantsCollection)));
+        arrival.clearBtn.addEventListener('click', () => showConfirmationModal('Limpar Chegadas', 'Tem certeza que deseja apagar TODOS os registros de chegada?', () => clearCollection(arrivalsCollection)));
         registration.exportBtn.addEventListener('click', exportParticipants);
         arrival.exportBtn.addEventListener('click', exportArrivals);
         
@@ -571,7 +617,7 @@
             onSnapshot(query(participantsCollection), (snapshot) => {
                 allParticipants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderParticipants(allParticipants);
-                if (allArrivals.length > 0) renderArrivals(allArrivals);
+                renderArrivals(allArrivals);
             });
 
             onSnapshot(query(arrivalsCollection), (snapshot) => {
