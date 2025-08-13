@@ -178,7 +178,6 @@
                         </thead>
                         <tbody id="participants-table-body" class="divide-y"></tbody>
                     </table>
-                    <div id="no-participants" class="text-center py-8 text-gray-500 hidden">Nenhum participante cadastrado.</div>
                 </div>
             </div>
         </div>
@@ -255,7 +254,6 @@
             clearBtn: document.getElementById('clear-participants-btn'),
             tableBody: document.getElementById('participants-table-body'),
             loading: document.getElementById('participants-loading'),
-            emptyMsg: document.getElementById('no-participants'),
             search: document.getElementById('search-participants'),
             count: document.getElementById('participants-count'),
         };
@@ -352,7 +350,6 @@
             const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
 
             registration.count.textContent = participantsToRender.length;
-            registration.emptyMsg.classList.toggle('hidden', !hasData);
             
             registration.exportBtn.disabled = !hasData;
             registration.exportBtn.classList.toggle('opacity-50', !hasData);
@@ -707,4 +704,4 @@
 
     </script>
 </body>
-</ht
+</html>
